@@ -20,6 +20,28 @@ returned HTTP 404 in CI, so the script now tries `coastalcph/lex_glue` and then 
 Hub's auto-converted parquet files for the same `ledgar` config. The subsample (first
 10,000 train and 3,500 test rows), the split, the baseline and the evaluation are unchanged.
 
+## Results (latest run)
+
+On the LEDGAR provision-type dataset (lex_glue/ledgar, subsampled), a standard TF-IDF logistic regression reached 63.4% macro-F1 on the held-out test split, while my class-balanced word-plus-character TF-IDF model with CV-tuned C reached 74.0%, from a single split.
+
+| Metric | Value |
+|---|---|
+| baseline_score | 0.6342 |
+| improved_score | 0.7399 |
+| improvement | 0.1056 |
+| baseline_f1 | 0.757 |
+| improved_f1 | 0.8197 |
+| baseline_accuracy | 0.7822 |
+| improved_accuracy | 0.8252 |
+| baseline_nn_agreement | 0.7677 |
+| improved_nn_agreement | 0.8086 |
+| improved_best_C | 30 |
+| runtime_seconds | 480.4 |
+
+Run on 2026-10-21. Full output: [results.json](results.json) · [run.log](run.log)
+
+Notes: Subsampled to the first rows of the official partitions for the CI time budget; labels with fewer than 4 rows dropped. Data is fetched from datasets-server with a fallback to the Hub's parquet conversion if the original id returns 404. Both models are deterministic (lbfgs, seeded CV), so a single run with seed 42 is reported. Baseline C was not tuned, which is the intended 'standard' comparison. Nearest-neighbour agreement is a proxy for traceability, not a verified support check. Results are from one split and one subsample; differences may be small.
+
 ## Reference
 
 This project is motivated by the following paper:
