@@ -1,0 +1,31 @@
+{
+  "question": "Can a class-balanced word-plus-character TF-IDF model with CV-tuned regularisation beat a standard TF-IDF logistic regression at assigning the correct provision type to legal clauses?",
+  "method": "Stratified 75/25 split of subsampled LEDGAR train+test partitions; identical data, preprocessing and evaluation for both models; macro-F1 primary, accuracy and nearest-neighbour label agreement secondary.",
+  "dataset": {
+    "name": "lex_glue/ledgar",
+    "source_url": "https://huggingface.co/datasets/lex_glue",
+    "n_rows": 13497,
+    "n_train": 10122,
+    "n_test": 3375,
+    "same_as_paper": false,
+    "baseline_is_papers_method": false
+  },
+  "metric_name": "macro-F1 over provision labels",
+  "higher_is_better": true,
+  "baseline": "Word TF-IDF (1-2 grams) + unweighted multinomial logistic regression (C=1).",
+  "improved": "Word + char_wb (3-5) TF-IDF, class_weight='balanced' logistic regression, C chosen from {3, 30} by 3-fold CV on the training set.",
+  "metrics": {
+    "baseline_score": 0.6342454377186588,
+    "improved_score": 0.739867060076269,
+    "improvement": 0.10562162235761019,
+    "baseline_f1": 0.7569688579865733,
+    "improved_f1": 0.8197134654154121,
+    "baseline_accuracy": 0.7822222222222223,
+    "improved_accuracy": 0.8251851851851851,
+    "baseline_nn_agreement": 0.7677037037037037,
+    "improved_nn_agreement": 0.8085925925925926,
+    "improved_best_C": 30.0,
+    "runtime_seconds": 480.39170241355896
+  },
+  "notes": "Subsampled to the first rows of the official partitions for the CI time budget; labels with fewer than 4 rows dropped. Data is fetched from datasets-server with a fallback to the Hub's parquet conversion if the original id returns 404. Both models are deterministic (lbfgs, seeded CV), so a single run with seed 42 is reported. Baseline C was not tuned, which is the intended 'standard' comparison. Nearest-neighbour agreement is a proxy for traceability, not a verified support check. Results are from one split and one subsample; differences may be small."
+}
