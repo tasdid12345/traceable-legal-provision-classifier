@@ -1,23 +1,24 @@
-# Word+Character TF-IDF Provision Classification on LEDGAR
+# traceable-legal-provision-classifier
 
-Motivation: Vietnamese legal question-answering systems rely on language-model answer generators, and the paper "Optimizing answer generator in Vietnamese legal question answering systems using language models" (2025) aims to make those answers better and more reliable. A first step toward traceable legal answers is to label each clause with its provision type and to check whether each label can be tied to supporting training text. This repository tests a cheap, fully reproducible classifier for that step.
+Compares a baseline (word TF-IDF + logistic regression) with an improved model
+(word + char_wb TF-IDF, class-balanced logistic regression, C chosen by 3-fold CV on the
+training set) for LEDGAR provision-type classification.
 
-Question: Can a class-balanced word-plus-character TF-IDF model with CV-tuned regularisation beat a standard TF-IDF logistic regression at assigning the correct provision type to legal clauses?
-
-Dataset: LEDGAR contract-provision clauses from the `lex_glue` collection (CC-licensed), downloaded over HTTP from the Hugging Face datasets-server. This is not the paper's own dataset. A subsample of the official train and test partitions is split once, stratified, into train and test.
-
-Baseline: word TF-IDF (1-2 grams) with an unweighted logistic regression. It is a stand-in for the paper's language-model answer generator, which is not public, and is not the paper's method.
-
-Improved model: adds character n-gram TF-IDF, class-balanced weights, and a 3-fold cross-validated choice of C on the training set only.
-
-## How to run
+## Running
 
 ```
 pip install -r requirements.txt
 python analysis.py
 ```
 
-Results are written to results.json (and a chart to figures/).
+Outputs `results.json` and `figures/baseline_vs_improved.png`.
+
+## Data source
+
+Rows are downloaded from the Hugging Face datasets-server. The original `lex_glue` id
+returned HTTP 404 in CI, so the script now tries `coastalcph/lex_glue` and then the
+Hub's auto-converted parquet files for the same `ledgar` config. The subsample (first
+10,000 train and 3,500 test rows), the split, the baseline and the evaluation are unchanged.
 
 ## Reference
 

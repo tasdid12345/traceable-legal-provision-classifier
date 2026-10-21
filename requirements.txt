@@ -1,5 +1,7 @@
 requests
 numpy
+pandas
+pyarrow
 scipy
 scikit-learn
 matplotlib

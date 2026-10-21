@@ -1,5 +1,6 @@
 """Baseline (word TF-IDF + logistic regression) vs improved (word+char TF-IDF,
 class-balanced LR, CV-tuned C) for LEDGAR provision-type classification."""
+import io
 import json
 import os
 import sys
@@ -9,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")  # headless rendering on CI
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import requests
 from scipy.sparse import hstack
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -19,16 +21,21 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_sp
 SEED = 42
 N_TRAIN_FETCH, N_TEST_FETCH = 10000, 3500   # subsample of official partitions (CI budget)
 BASE = "https://datasets-server.huggingface.co/rows"
+# The datasets-server returned 404 for the "lex_glue" id, so we try the other
+# known ids and finally the Hub's auto-converted parquet files.
+DATASET_IDS = ["lex_glue", "coastalcph/lex_glue"]
+PARQUET_BASE = ("https://huggingface.co/datasets/coastalcph/lex_glue/"
+                "resolve/refs%2Fconvert%2Fparquet/ledgar")
 DATASET_URL = "https://huggingface.co/datasets/lex_glue"
 RETRY_CODES = {429, 500, 502, 503, 504}
 np.random.seed(SEED)
 
 
-def fetch_split(split, n):
-    """Download the first n rows of a LEDGAR split (datasets-server allows <=100 rows/request)."""
+def _fetch_rows_api(dataset_id, split, n):
+    """Rows via datasets-server (<=100 rows/request). Raises HTTPError on failure."""
     rows, offset = [], 0
     while offset < n:
-        url = (f"{BASE}?dataset=lex_glue&config=ledgar&split={split}"
+        url = (f"{BASE}?dataset={dataset_id}&config=ledgar&split={split}"
                f"&offset={offset}&length={min(100, n - offset)}")
         for attempt in range(6):  # retry with exponential backoff on rate limits / server errors
             r = requests.get(url, timeout=60)
@@ -42,6 +49,38 @@ def fetch_split(split, n):
             break
         rows += [(b["row"]["text"], int(b["row"]["label"])) for b in batch]
         offset += len(batch)
+    return rows
+
+
+def _fetch_rows_parquet(split, n):
+    """Rows from the Hub's auto-converted parquet shards (same first-n-rows subsample)."""
+    rows, shard = [], 0
+    while len(rows) < n:
+        url = f"{PARQUET_BASE}/{split}/{shard:04d}.parquet"
+        r = requests.get(url, timeout=120)
+        if r.status_code == 404:
+            break
+        r.raise_for_status()
+        df = pd.read_parquet(io.BytesIO(r.content))
+        rows += list(zip(df["text"].astype(str), df["label"].astype(int)))
+        shard += 1
+    return rows[:n]
+
+
+def fetch_split(split, n):
+    """Download the first n rows of a LEDGAR split, trying each source in turn."""
+    rows = []
+    for ds in DATASET_IDS:
+        try:
+            rows = _fetch_rows_api(ds, split, n)
+            if rows:
+                print(f"  {split}: datasets-server id '{ds}'")
+                break
+        except requests.HTTPError as e:
+            print(f"  datasets-server id '{ds}' failed ({e}); trying next source")
+    if not rows:
+        print("  falling back to parquet files on the Hub")
+        rows = _fetch_rows_parquet(split, n)
     print(f"  {split}: fetched {len(rows)} rows")
     return rows
 
@@ -66,7 +105,7 @@ def evaluate(name, pred, yte, Wte, Wtr, ytr):
 
 def main():
     t0 = time.time()
-    print("Downloading LEDGAR rows from datasets-server...")
+    print("Downloading LEDGAR rows...")
     rows = fetch_split("train", N_TRAIN_FETCH) + fetch_split("test", N_TEST_FETCH)
     if len(rows) < 1000:
         sys.exit("Too few rows downloaded; cannot produce meaningful metrics")
@@ -145,11 +184,13 @@ def main():
             "runtime_seconds": float(time.time() - t0),
         },
         "notes": ("Subsampled to the first rows of the official partitions for the CI time budget; "
-                  "labels with fewer than 4 rows dropped. Both models are deterministic "
-                  "(lbfgs, seeded CV), so a single run with seed 42 is reported. Baseline C was "
-                  "not tuned, which is the intended 'standard' comparison. Nearest-neighbour "
-                  "agreement is a proxy for traceability, not a verified support check. "
-                  "Results are from one split and one subsample; differences may be small."),
+                  "labels with fewer than 4 rows dropped. Data is fetched from datasets-server "
+                  "with a fallback to the Hub's parquet conversion if the original id returns 404. "
+                  "Both models are deterministic (lbfgs, seeded CV), so a single run with seed 42 "
+                  "is reported. Baseline C was not tuned, which is the intended 'standard' "
+                  "comparison. Nearest-neighbour agreement is a proxy for traceability, not a "
+                  "verified support check. Results are from one split and one subsample; "
+                  "differences may be small."),
     }
     with open("results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
